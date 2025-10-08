@@ -12,15 +12,19 @@ export type StoryManifest = {
   slides: StorySlide[];
 };
 
-export const storybooks: StoryManifest[] = [
-  {
-    id: "story-2",
-    name: "Story 2",
-    pdfPath: "/storybook/story-2.pdf",
-    slides: Array.from({ length: 16 }, (_, index) => ({
-      id: `story-2-slide-${index + 1}`,
-      title: `Slide ${index + 1}`,
-      pdfPage: index + 1,
-    })),
-  },
-];
+export function generateSlides(count: number, storyId: string = 'uploaded'): StorySlide[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `${storyId}-slide-${index + 1}`,
+    title: `Slide ${index + 1}`,
+    pdfPage: index + 1,
+  }));
+}
+
+export function createStoryFromFile(file: File, slideCount: number): StoryManifest {
+  return {
+    id: 'uploaded',
+    name: file.name.replace('.pdf', ''),
+    pdfPath: URL.createObjectURL(file),
+    slides: generateSlides(slideCount, 'uploaded'),
+  };
+}

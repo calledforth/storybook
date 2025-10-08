@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { storybooks } from "@/data/storybooks";
+import { useEffect, useState } from "react";
+import { createStoryFromFile, StoryManifest } from "@/data/storybooks";
 import { loadSlidesFromPdf } from "@/lib/loadPdfSlides";
 import { faceSwap } from "@/lib/faceSwap";
 import { useSlidesStore } from "@/store/slides";
-import { ArrowPathIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon, ArrowUpTrayIcon, DocumentArrowUpIcon } from "@heroicons/react/24/outline";
 import JSZip from "jszip";
 import { exportSlidesToPdf } from "@/lib/exportSlides";
 
@@ -14,13 +14,11 @@ type UploadFile = File & { webkitRelativePath?: string };
 export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [isLoadingStory, setIsLoadingStory] = useState(false);
   const [processCount, setProcessCount] = useState<number>(1);
   const [isExporting, setIsExporting] = useState(false);
-
-  const story = useMemo(() => storybooks[0], []);
+  const [story, setStoryData] = useState<StoryManifest | null>(null);
 
   const {
     slides,
@@ -33,29 +31,28 @@ export default function Home() {
     reset,
   } = useSlidesStore();
 
-  useEffect(() => {
-    async function loadSelectedStory() {
-      if (!selectedStoryId) return;
+  async function handlePdfUpload(file: File) {
+    try {
+      setIsLoadingStory(true);
+      setError(null);
       
-      try {
-        setIsLoadingStory(true);
-        setError(null);
-        const images = await loadSlidesFromPdf(story.pdfPath, story.slides);
-        setStory(story, images);
-        // Default process count to the full length once story is loaded
-        setProcessCount(Math.min(3, story.slides.length));
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load storybook assets.");
-      } finally {
-        setIsLoadingStory(false);
-      }
+      // Create story from uploaded file
+      const newStory = createStoryFromFile(file, 16); // Default to 16 slides, we'll detect actual count
+      setStoryData(newStory);
+      
+      // Load slides from PDF
+      const images = await loadSlidesFromPdf(newStory.pdfPath, newStory.slides);
+      setStory(newStory, images);
+      
+      // Set default process count
+      setProcessCount(Math.min(3, newStory.slides.length));
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load PDF. Please ensure it's a valid PDF file.");
+    } finally {
+      setIsLoadingStory(false);
     }
-
-    if (selectedStoryId) {
-      loadSelectedStory();
-    }
-  }, [selectedStoryId, story, setStory]);
+  }
 
   const currentSlide = currentSlideId ? slides[currentSlideId] : null;
 
@@ -70,6 +67,8 @@ export default function Home() {
   }
 
   async function handleZipUpload(file: UploadFile) {
+    if (!story) return;
+    
     const zip = await JSZip.loadAsync(file);
     const entries = Object.values(zip.files).filter((entry) => !entry.dir);
 
@@ -141,15 +140,15 @@ export default function Home() {
     reset();
     setError(null);
     setUploadedImage(null);
-    setSelectedStoryId(null);
+    setStoryData(null);
     setHasGenerated(false);
     setIsLoadingStory(false);
     setProcessCount(1);
   }
 
-  const canGenerate = uploadedImage && selectedStoryId && !hasGenerated && !isLoadingStory;
+  const canGenerate = uploadedImage && story && !hasGenerated && !isLoadingStory;
   const showSlides = hasGenerated && activeStory;
-  const storyLoaded = selectedStoryId && activeStory && !isLoadingStory;
+  const storyLoaded = story && activeStory && !isLoadingStory;
 
   return (
     <main className="h-screen flex overflow-hidden">
@@ -164,31 +163,41 @@ export default function Home() {
         <div className="space-y-4">
           <div>
             <label className="mb-2 block text-xs font-medium uppercase tracking-[0.2em] text-white/50">
-              Select Storybook
+              Upload Storybook PDF
             </label>
-            <button
-              type="button"
-              onClick={() => setSelectedStoryId(story.id)}
-              disabled={isLoadingStory}
-              className={`glass-panel w-full rounded-xl px-4 py-3 text-left text-sm transition hover:border-white/30 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed ${
-                selectedStoryId === story.id ? "border-white/40 bg-white/10" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-white/90">{story.name}</div>
-                  <p className="mt-1 text-xs text-white/50">{story.slides.length} slides</p>
-                </div>
-                {isLoadingStory && selectedStoryId === story.id && (
-                  <ArrowPathIcon className="h-4 w-4 animate-spin text-white/60" />
-                )}
-                {storyLoaded && (
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500/20">
-                    <div className="h-2 w-2 rounded-full bg-green-400" />
+            {!story ? (
+              <label className="glass-panel group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 px-4 py-6 text-center text-xs uppercase tracking-[0.3em] text-white/40 transition hover:border-white/30 hover:bg-white/5">
+                <DocumentArrowUpIcon className="h-8 w-8 text-white/60 transition group-hover:scale-105" />
+                <span>Upload PDF Storybook</span>
+                <p className="text-[10px] text-white/30 normal-case">Drag & drop or click to select</p>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  disabled={isLoadingStory}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handlePdfUpload(file);
+                  }}
+                />
+              </label>
+            ) : (
+              <div className="glass-panel w-full rounded-xl px-4 py-3 border-white/40 bg-white/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-white/90">{story.name}</div>
+                    <p className="mt-1 text-xs text-white/50">{story.slides.length} slides</p>
                   </div>
-                )}
+                  {isLoadingStory ? (
+                    <ArrowPathIcon className="h-4 w-4 animate-spin text-white/60" />
+                  ) : (
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500/20">
+                      <div className="h-2 w-2 rounded-full bg-green-400" />
+                    </div>
+                  )}
+                </div>
               </div>
-            </button>
+            )}
           </div>
 
           <div>
@@ -233,9 +242,9 @@ export default function Home() {
             <input
               type="number"
               min={1}
-              max={story.slides.length}
+              max={story?.slides.length || 16}
               value={processCount}
-              onChange={(e) => setProcessCount(Math.max(1, Math.min(Number(e.target.value || 1), story.slides.length)))}
+              onChange={(e) => setProcessCount(Math.max(1, Math.min(Number(e.target.value || 1), story?.slides.length || 16)))}
               disabled={!storyLoaded}
               className="glass-panel w-full rounded-xl px-3 py-2 bg-transparent outline-none"
             />
@@ -284,7 +293,7 @@ export default function Home() {
               </header>
               <div className="flex-1 overflow-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {story.slides.map((slide) => {
+                  {story?.slides.map((slide) => {
                     const base = slides[slide.id]?.baseImage;
                     return (
                       <div key={slide.id} className="glass-panel rounded-2xl border border-white/10 p-3">
@@ -309,12 +318,12 @@ export default function Home() {
                 </h2>
                 <div className="space-y-3 text-sm text-white/60">
                   <p className="flex items-center gap-2">
-                    <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                      storyLoaded ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/60"
-                    }`}>
-                      {storyLoaded ? "✓" : "1"}
-                    </span>
-                    Select a storybook from the sidebar
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                    storyLoaded ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/60"
+                  }`}>
+                    {storyLoaded ? "✓" : "1"}
+                  </span>
+                  Upload a PDF storybook
                   </p>
                   <p className="flex items-center gap-2">
                     <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
@@ -354,7 +363,7 @@ export default function Home() {
                     const pdfBlob = await exportSlidesToPdf(slideList);
                     const link = document.createElement("a");
                     link.href = URL.createObjectURL(pdfBlob);
-                    link.download = `${story.id}-personalized.pdf`;
+                    link.download = `${story?.id || 'storybook'}-personalized.pdf`;
                     link.click();
                     URL.revokeObjectURL(link.href);
                   } finally {
@@ -383,7 +392,7 @@ export default function Home() {
                     <div className="mb-4 flex items-center justify-between">
                       <div>
                         <h2 className="text-xl font-semibold text-white/90">
-                          {story.slides.find((slide) => slide.id === currentSlide.slideId)?.title}
+                          {story?.slides.find((slide) => slide.id === currentSlide.slideId)?.title}
                         </h2>
                         <p className="text-xs uppercase tracking-[0.3em] text-white/30">
                           {currentSlide.status === "loading"
@@ -392,7 +401,7 @@ export default function Home() {
                             ? "Error"
                             : "Ready"}
                         </p>
-                      </div>
+        </div>
                       <div className="flex gap-3">
                         <button
                           type="button"
@@ -425,7 +434,7 @@ export default function Home() {
 
               <div className="w-64 glass-panel rounded-3xl border border-white/10 p-4 overflow-y-auto scrollbar-thin">
                 <div className="space-y-4">
-                  {story.slides.map((slide) => {
+                  {story?.slides.map((slide) => {
                     const slideData = slides[slide.id];
                     const isActive = slide.id === currentSlideId;
                     const status = slideData?.status ?? "idle";
