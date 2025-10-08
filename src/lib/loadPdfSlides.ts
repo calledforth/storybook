@@ -36,7 +36,11 @@ export async function loadSlidesFromPdf(
     canvas.height = viewport.height;
     canvas.width = viewport.width;
 
-    await page.render({ canvasContext: context, canvas, viewport } as any).promise;
+    await page.render({ 
+      canvasContext: context, 
+      canvas, 
+      viewport 
+    }).promise;
 
     slideImages[slide.id] = canvas.toDataURL("image/png");
   }
