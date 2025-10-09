@@ -23,28 +23,11 @@ export interface GeminiPromptResult {
 
 const client = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 
-const responseJsonSchema = {
-  type: "object",
-  properties: {
-    prompt: {
-      type: "string",
-      description:
-        "Image generation prompt referencing the trigger word and matching the slide style",
-    },
-    rationale: {
-      type: "string",
-      description: "Brief explanation of how the prompt matches the slide",
-    },
-  },
-  required: ["prompt"],
-} as const;
-
 export async function generateSlidePrompt(request: GeminiPromptRequest): Promise<GeminiPromptResult> {
   const model = client.getGenerativeModel({
     model: GEMINI_MODEL,
     generationConfig: { 
       responseMimeType: "application/json",
-      responseJsonSchema,
     },
   });
 
@@ -75,7 +58,13 @@ The attached image shows the storybook slide with a cartoon character.
 
 ${guidance ?? ""}
 
-Generate a highly detailed, photorealistic image generation prompt describing ${triggerWord} (the real person) performing the exact same action/pose as the cartoon character. The output must be a natural, realistic photograph of a real human, not an illustration. Include details about pose, expression, clothing, and emphasize photorealistic quality. Character only, no background.`;
+Generate a highly detailed, photorealistic image generation prompt describing ${triggerWord} (the real person) performing the exact same action/pose as the cartoon character. The output must be a natural, realistic photograph of a real human, not an illustration. Include details about pose, expression, clothing, and emphasize photorealistic quality. Character only, no background.
+
+IMPORTANT: Return your response as a JSON object with this exact structure:
+{
+  "prompt": "your detailed prompt here",
+  "rationale": "brief explanation of how the prompt matches the slide"
+}`;
 
   const parts = [
     { text: systemPrompt },
@@ -87,7 +76,9 @@ Generate a highly detailed, photorealistic image generation prompt describing ${
     },
   ];
 
-  const result = await model.generateContent({ contents: [{ role: "user", parts }] });
+  const result = await model.generateContent({ 
+    contents: [{ role: "user", parts }],
+  });
   const text = result.response?.text();
 
   if (!text) {

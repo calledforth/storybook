@@ -68,7 +68,7 @@ export async function uploadTrainingZip(buffer: Buffer, filename = "data.zip") {
   const formData = new FormData();
   formData.append(
     "content",
-    new Blob([buffer], { type: "application/zip" }),
+    new Blob([buffer as BlobPart], { type: "application/zip" }),
     filename,
   );
 

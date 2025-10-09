@@ -41,7 +41,7 @@ export async function runFineTunedModel(params: RunFineTunedModelParams) {
   console.log("[replicateInference] Running model:", params.modelVersion);
   console.log("[replicateInference] Input:", input);
   
-  const output = await replicate.run(params.modelVersion, { input });
+  const output = await replicate.run(params.modelVersion as `${string}/${string}` | `${string}/${string}:${string}`, { input });
   
   console.log("[replicateInference] Raw output:", output);
   console.log("[replicateInference] Output type:", typeof output);
@@ -82,7 +82,7 @@ export async function removeBackground(imageUrl: string): Promise<string> {
   
   console.log("[removeBackground] Processing image:", imageUrl);
   
-  const output = await replicate.run("lucataco/remove-bg:95fcc2a26d3899cd6c2691c900465aaeff466285a65c14638cc5f36f34befaf1", {
+  const output = await replicate.run("lucataco/remove-bg:95fcc2a26d3899cd6c2691c900465aaeff466285a65c14638cc5f36f34befaf1" as `${string}/${string}:${string}`, {
     input: {
       image: imageUrl,
     },
