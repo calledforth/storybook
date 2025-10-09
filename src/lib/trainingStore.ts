@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+// In-memory store for server-side tracking (resets on deployment/restart)
+// Client-side uses localStorage for persistence
 
 export interface FineTuneRecord {
   trainingId: string;
@@ -16,37 +16,9 @@ export interface FineTuneRecord {
   error?: string | null;
 }
 
-const STORE_PATH = join(process.cwd(), "data", "fineTunes.json");
-
-function ensureStoreFile() {
-  const dir = dirname(STORE_PATH);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  if (!existsSync(STORE_PATH)) {
-    writeFileSync(STORE_PATH, "[]", "utf8");
-  }
-}
-
-function loadStore(): FineTuneRecord[] {
-  ensureStoreFile();
-  try {
-    const raw = readFileSync(STORE_PATH, "utf8");
-    const parsed = JSON.parse(raw) as FineTuneRecord[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Failed to load fine-tune store", error);
-    return [];
-  }
-}
-
-function persistStore(records: FineTuneRecord[]) {
-  ensureStoreFile();
-  writeFileSync(STORE_PATH, JSON.stringify(records, null, 2), "utf8");
-}
-
-let records = loadStore();
-const index = new Map(records.map((record) => [record.trainingId, record] as const));
+// In-memory store (for current session only)
+let records: FineTuneRecord[] = [];
+const index = new Map<string, FineTuneRecord>();
 
 function upsert(record: FineTuneRecord) {
   const existingIndex = records.findIndex((item) => item.trainingId === record.trainingId);
@@ -56,7 +28,7 @@ function upsert(record: FineTuneRecord) {
     records = [...records, record];
   }
   index.set(record.trainingId, record);
-  persistStore(records);
+  // No file persistence - data lives in memory only
 }
 
 export function createFineTuneRecord(record: Omit<FineTuneRecord, "updatedAt">) {
@@ -96,6 +68,3 @@ export function listCompletedFineTunes() {
     ["succeeded", "completed"].includes(record.status),
   );
 }
-
-
-

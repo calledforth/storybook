@@ -33,6 +33,68 @@ interface FineTuneStatusResponse {
 }
 
 const POLL_INTERVAL = 5000;
+const STORAGE_KEY = "storybook_finetune_records";
+
+// Helper functions for localStorage
+function saveRecordsToStorage(records: TrainingRecord[]) {
+  try {
+    console.log("[localStorage] 💾 Saving", records.length, "records to browser storage");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    console.log("[localStorage] ✅ Successfully saved records");
+  } catch (err) {
+    console.error("[localStorage] ❌ Failed to save records:", err);
+  }
+}
+
+function loadRecordsFromStorage(): TrainingRecord[] {
+  try {
+    console.log("[localStorage] 📖 Loading records from browser storage");
+    const data = localStorage.getItem(STORAGE_KEY);
+    const records = data ? JSON.parse(data) : [];
+    console.log("[localStorage] ✅ Loaded", records.length, "records");
+    return records;
+  } catch (err) {
+    console.error("[localStorage] ❌ Failed to load records:", err);
+    return [];
+  }
+}
+
+// Migration helper: Load initial data from server if localStorage is empty
+function migrateInitialData(): TrainingRecord[] {
+  const existing = loadRecordsFromStorage();
+  if (existing.length > 0) {
+    console.log("[localStorage] ℹ️ Found existing data, skipping migration");
+    return existing;
+  }
+
+  console.log("[localStorage] 🔄 No existing data, checking for migration...");
+  
+  // Initial data from fineTunes.json
+  const initialData: TrainingRecord[] = [
+    {
+      trainingId: "kq8adcyda9rm80csrwar3mnvvc",
+      destination: "jaiadhitya-k/black-forest-labs-flux-pro-trainer",
+      triggerWord: "STORYSPARK_737KZ8",
+      owner: "jaiadhitya-k",
+      modelName: "black-forest-labs-flux-pro-trainer",
+      inputUrl: "https://api.replicate.com/v1/files/NDFjOGFmMDMtMWQ1Ni00YTM4LThjZTEtNzMxYmU1ZWVjMDhm",
+      status: "succeeded",
+      createdAt: "2025-10-09T03:48:32.945Z",
+      version: "jaiadhitya-k/black-forest-labs-flux-pro-trainer:735577e135eb15acd7ac6cde847e9389245be78ba2cebc13a9638fdbc6504e2f",
+      weightsUrl: "https://replicate.delivery/xezq/GJQo6GA7Olo7OhVDbQQgm0qCNQJx6deP2lPC3LMWDwroKnuKA/trained_model.tar",
+      error: null,
+      updatedAt: "2025-10-09T04:00:18.479Z",
+    },
+  ];
+
+  if (initialData.length > 0) {
+    console.log("[localStorage] 📦 Migrating", initialData.length, "initial records");
+    saveRecordsToStorage(initialData);
+    return initialData;
+  }
+
+  return [];
+}
 
 export default function FineTunePage() {
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -78,18 +140,30 @@ export default function FineTunePage() {
   const pollStatus = useCallback(
     async (trainingId: string) => {
       try {
+        console.log(`[Poll] 🔄 Checking status for training: ${trainingId}`);
         const response = await fetch(`/api/fine-tune/status?trainingId=${trainingId}`);
         if (!response.ok) {
           throw new Error(await response.text());
         }
         const data: FineTuneStatusResponse = await response.json();
+        console.log(`[Poll] 📊 Status update:`, data.record.status);
         setCurrentRecord(data.record);
 
+        // Update localStorage with latest status
+        setRecords((prev) => {
+          const updated = prev.map((item) =>
+            item.trainingId === trainingId ? data.record : item
+          );
+          saveRecordsToStorage(updated);
+          return updated;
+        });
+
         if (["succeeded", "failed", "canceled", "completed"].includes(data.record.status)) {
+          console.log(`[Poll] ✅ Training ${data.record.status}. Stopping polling.`);
           stopPolling();
         }
       } catch (err) {
-        console.error("Polling error", err);
+        console.error("[Poll] ❌ Polling error:", err);
         stopPolling();
       }
     },
@@ -99,27 +173,27 @@ export default function FineTunePage() {
   const fetchRecords = useCallback(async () => {
     setIsLoadingRecords(true);
     try {
-      const response = await fetch("/api/fine-tune/records", { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error("Failed to load fine-tune history");
-      }
-      const data = await response.json();
-      const list = data.records as TrainingRecord[];
+      console.log("[FineTune] 🔍 Fetching fine-tune records");
+      // Load from localStorage with migration
+      const list = migrateInitialData();
+      console.log("[FineTune] 📋 Found", list.length, "fine-tune records");
       setRecords(list);
       if (!currentRecord && list.length) {
+        console.log("[FineTune] 🎯 Setting current record to:", list[0].trainingId);
         setCurrentRecord(list[0]);
       }
       if (!selectedRecordId && list.length) {
         setSelectedRecordId(list[0].trainingId);
       }
     } catch (err) {
-      console.error("Failed to fetch records", err);
+      console.error("[FineTune] ❌ Failed to fetch records:", err);
     } finally {
       setIsLoadingRecords(false);
     }
   }, [currentRecord, selectedRecordId]);
 
   useEffect(() => {
+    console.log("[FineTune] 🚀 Component mounted, initializing...");
     fetchRecords();
   }, [fetchRecords]);
 
@@ -133,17 +207,23 @@ export default function FineTunePage() {
         setError(null);
         setSuccessMessage(null);
 
+        console.log("[FineTune] 🚀 Starting fine-tuning submission");
+        console.log("[FineTune] 📝 Model name:", modelName.trim());
+
         const formData = new FormData();
         formData.append("modelName", modelName.trim());
 
         if (zipFile) {
+          console.log("[FineTune] 📦 Uploading zip file:", zipFile.name, `(${(zipFile.size / 1024 / 1024).toFixed(2)} MB)`);
           formData.append("zip", zipFile);
         } else if (images.length) {
+          console.log("[FineTune] 🖼️ Uploading", images.length, "images");
           images.forEach((file) => formData.append("images", file));
         } else {
           throw new Error("Please upload a zip file or select images");
         }
 
+        console.log("[FineTune] 📡 Sending request to /api/fine-tune");
         const response = await fetch("/api/fine-tune", {
           method: "POST",
           body: formData,
@@ -154,22 +234,31 @@ export default function FineTunePage() {
         }
 
         const data: FineTuneResponse = await response.json();
+        console.log("[FineTune] ✅ Fine-tuning started!");
+        console.log("[FineTune] 🆔 Training ID:", data.trainingId);
+        console.log("[FineTune] 🔑 Trigger word:", data.triggerWord);
+        
         setCurrentRecord(data.record);
         setSelectedRecordId(data.trainingId);
         setRecords((prev) => {
           const exists = prev.some((item) => item.trainingId === data.trainingId);
-          return exists
+          const updated = exists
             ? prev.map((item) => (item.trainingId === data.trainingId ? data.record : item))
             : [data.record, ...prev];
+          // Save to localStorage
+          console.log("[FineTune] 💾 Saving new record to localStorage");
+          saveRecordsToStorage(updated);
+          return updated;
         });
         setSuccessMessage("Fine-tuning started. We will notify you as it progresses.");
         resetForm();
 
+        console.log("[FineTune] ⏱️ Starting status polling (every", POLL_INTERVAL / 1000, "seconds)");
         stopPolling();
         pollStatus(data.trainingId);
         pollRef.current = setInterval(() => pollStatus(data.trainingId), POLL_INTERVAL);
       } catch (err) {
-        console.error("Submit error", err);
+        console.error("[FineTune] ❌ Submit error:", err);
         setError(err instanceof Error ? err.message : "Failed to start fine-tuning");
       } finally {
         setIsSubmitting(false);

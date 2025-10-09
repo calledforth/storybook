@@ -43,13 +43,22 @@ export default function StoryPage() {
   const currentRationale = useMemo(() => currentSlide?.rationale, [currentSlide]);
 
   const fetchModels = useCallback(async () => {
-    const response = await fetch("/api/fine-tune/records");
-    if (!response.ok) return;
-    const data = await response.json();
-    const completed = (data.records as FineTuneRecordSummary[]).filter((record) => record.version);
-    setModelRecords(completed);
-    if (!activeRecord && completed.length) {
-      setActiveRecord(completed[0]);
+    try {
+      console.log("[Story] 🔍 Loading fine-tuned models from localStorage");
+      // Load from localStorage
+      const data = localStorage.getItem("storybook_finetune_records");
+      const allRecords = data ? JSON.parse(data) : [];
+      console.log("[Story] 📋 Found", allRecords.length, "total records");
+      const completed = (allRecords as FineTuneRecordSummary[]).filter((record) => record.version);
+      console.log("[Story] ✅ Found", completed.length, "completed models");
+      setModelRecords(completed);
+      if (!activeRecord && completed.length) {
+        console.log("[Story] 🎯 Setting active model:", completed[0].destination);
+        console.log("[Story] 🔑 Trigger word:", completed[0].triggerWord);
+        setActiveRecord(completed[0]);
+      }
+    } catch (err) {
+      console.error("[Story] ❌ Failed to load models from localStorage:", err);
     }
   }, [activeRecord]);
 
@@ -82,7 +91,12 @@ export default function StoryPage() {
     setGenerating(true);
     try {
       const slidesToProcess = activeStory.slides.slice(0, slideCount);
-      for (const slide of slidesToProcess) {
+      console.log("[Story] 🎬 Starting generation for", slidesToProcess.length, "slides");
+      console.log("[Story] 🎨 Using model:", activeRecord.destination);
+      console.log("[Story] 🔑 Trigger word:", activeRecord.triggerWord);
+      
+      for (const [index, slide] of slidesToProcess.entries()) {
+        console.log(`[Story] 📄 Processing slide ${index + 1}/${slidesToProcess.length}: ${slide.title}`);
         const slideData = slides[slide.id];
         if (!slideData?.baseImage) continue;
         if (typeof window === "undefined") {
@@ -102,6 +116,7 @@ export default function StoryPage() {
           loadingMessage: "🤖 Generating character with AI model..."
         });
 
+        console.log(`[Story] 🤖 Calling Gemini for slide analysis...`);
         const response = await fetch("/api/story-inference", {
           method: "POST",
           headers: {
@@ -127,16 +142,21 @@ export default function StoryPage() {
         });
 
         const data = await response.json();
+        console.log(`[Story] ✅ Generated prompt:`, data.prompt);
         
         if (!data.cleanedImage) {
           throw new Error("No cleaned image returned from server");
         }
 
+        console.log(`[Story] 🖼️ Received cleaned character image`);
         setSlideStatus(slide.id, "loading", {
           loadingMessage: "✨ Compositing final image..."
         });
 
+        console.log(`[Story] 🎨 Compositing character onto slide background...`);
         const assets = await prepareSlideAssets(slideData.baseImage, data.cleanedImage);
+        console.log(`[Story] ✅ Slide ${index + 1}/${slidesToProcess.length} completed!`);
+        
         setSlideStatus(slide.id, "ready", {
           resultImage: assets.composedImage,
           characterImage: assets.characterImage,
@@ -144,8 +164,10 @@ export default function StoryPage() {
           rationale: data.rationale,
         });
       }
+      
+      console.log("[Story] 🎉 All slides generated successfully!");
     } catch (err) {
-      console.error(err);
+      console.error("[Story] ❌ Generation error:", err);
       setError(err instanceof Error ? err.message : "Failed to generate story");
     } finally {
       setGenerating(false);
