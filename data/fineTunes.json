@@ -1,0 +1,16 @@
+[
+  {
+    "trainingId": "kq8adcyda9rm80csrwar3mnvvc",
+    "destination": "jaiadhitya-k/black-forest-labs-flux-pro-trainer",
+    "triggerWord": "STORYSPARK_737KZ8",
+    "owner": "jaiadhitya-k",
+    "modelName": "black-forest-labs-flux-pro-trainer",
+    "inputUrl": "https://api.replicate.com/v1/files/NDFjOGFmMDMtMWQ1Ni00YTM4LThjZTEtNzMxYmU1ZWVjMDhm",
+    "status": "succeeded",
+    "createdAt": "2025-10-09T03:48:32.945Z",
+    "version": "jaiadhitya-k/black-forest-labs-flux-pro-trainer:735577e135eb15acd7ac6cde847e9389245be78ba2cebc13a9638fdbc6504e2f",
+    "weightsUrl": "https://replicate.delivery/xezq/GJQo6GA7Olo7OhVDbQQgm0qCNQJx6deP2lPC3LMWDwroKnuKA/trained_model.tar",
+    "error": null,
+    "updatedAt": "2025-10-09T04:00:18.479Z"
+  }
+]

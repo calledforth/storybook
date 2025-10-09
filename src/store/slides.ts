@@ -12,6 +12,10 @@ export type SlideData = {
   userImage: string | null;
   status: SlideStatus;
   error?: string;
+  prompt?: string;
+  rationale?: string;
+  characterImage?: string | null;
+  loadingMessage?: string;
 };
 
 interface SlidesState {
@@ -44,6 +48,9 @@ export const useSlidesStore = create<SlidesState>((set) => ({
           resultImage: baseImage,
           userImage: null,
           status: baseImage ? "ready" : "idle",
+          prompt: undefined,
+          rationale: undefined,
+          characterImage: null,
         };
         return acc;
       }, {}),
@@ -68,6 +75,9 @@ export const useSlidesStore = create<SlidesState>((set) => ({
             status: "idle",
             error: undefined,
             resultImage: current.baseImage,
+            characterImage: null,
+            prompt: undefined,
+            rationale: undefined,
           },
         },
       };
@@ -90,3 +100,4 @@ export const useSlidesStore = create<SlidesState>((set) => ({
       currentSlideId: null,
     })),
 }));
+

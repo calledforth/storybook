@@ -1,9 +1,6 @@
-import Replicate from "replicate";
 import { NextRequest, NextResponse } from "next/server";
 
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
-});
+import { getReplicateClient } from "@/lib/replicate";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,16 +13,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.REPLICATE_API_TOKEN) {
-      return NextResponse.json(
-        { error: "REPLICATE_API_TOKEN not configured" },
-        { status: 500 }
-      );
-    }
-
     // Convert base64 data URLs to Buffers
     const slideBuffer = Buffer.from(slideImage.split(",")[1], "base64");
     const userBuffer = Buffer.from(userImage.split(",")[1], "base64");
+
+    const replicate = getReplicateClient();
 
     // Upload files to Replicate
     const slideFile = await replicate.files.create(
