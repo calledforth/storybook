@@ -65,6 +65,8 @@ function toDataUrl(canvas: HTMLCanvasElement) {
   return canvas.toDataURL("image/png");
 }
 
+// Legacy local background removal (unused now that we use Replicate)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function removeBackground(canvas: HTMLCanvasElement, threshold: number) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return;

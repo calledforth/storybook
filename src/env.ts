@@ -1,10 +1,4 @@
-const requiredEnvVars = [
-  "REPLICATE_API_TOKEN",
-  "REPLICATE_OWNER",
-  "GEMINI_API_KEY",
-] as const;
-
-type RequiredEnvVar = (typeof requiredEnvVars)[number];
+type RequiredEnvVar = "REPLICATE_API_TOKEN" | "REPLICATE_OWNER" | "GEMINI_API_KEY";
 
 function getEnv(name: RequiredEnvVar) {
   const value = process.env[name];

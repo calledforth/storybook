@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       prompt: result.prompt,
       rationale: result.rationale,
       rawImages: result.generatedImages,
-      cleanedImage: result.cleanedImage,
+      cleanedImage: result.cleanedImage, // legacy
+      compositedImage: result.compositedImage, // new inpainting output
     });
   } catch (error) {
     console.error("Story inference error", error);

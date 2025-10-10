@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createStoryFromFile, StoryManifest } from "@/data/storybooks";
 import { loadSlidesFromPdf } from "@/lib/loadPdfSlides";
 import { faceSwap } from "@/lib/faceSwap";

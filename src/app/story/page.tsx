@@ -5,10 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createStoryFromFile } from "@/data/storybooks";
 import { prepareSlideAssets } from "@/lib/compositor";
 import { loadSlidesFromPdf } from "@/lib/loadPdfSlides";
+import { exportSlidesToPdf } from "@/lib/exportSlides";
 import { useSlidesStore } from "@/store/slides";
 import {
   ArrowPathIcon,
   DocumentArrowUpIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 
 interface FineTuneRecordSummary {
@@ -27,6 +29,7 @@ export default function StoryPage() {
   const [activeRecord, setActiveRecord] = useState<FineTuneRecordSummary | null>(null);
   const [generating, setGenerating] = useState(false);
   const [slideCount, setSlideCount] = useState<number>(3);
+  const [isExporting, setIsExporting] = useState(false);
 
   const {
     slides,
@@ -113,7 +116,7 @@ export default function StoryPage() {
         await new Promise(resolve => setTimeout(resolve, 300));
 
         setSlideStatus(slide.id, "loading", {
-          loadingMessage: "🤖 Generating character with AI model..."
+          loadingMessage: "🧠 Generating mask & inpainting on slide..."
         });
 
         console.log(`[Story] 🤖 Calling Gemini for slide analysis...`);
@@ -138,41 +141,57 @@ export default function StoryPage() {
         }
 
         setSlideStatus(slide.id, "loading", {
-          loadingMessage: "✂️ Removing background..."
+          loadingMessage: "🎨 Applying edits to slide..."
         });
 
         const data = await response.json();
         console.log(`[Story] ✅ Generated prompt:`, data.prompt);
         
-        if (!data.cleanedImage) {
-          throw new Error("No cleaned image returned from server");
+        if (data.compositedImage) {
+          console.log(`[Story] 🖼️ Received composited slide image`);
+          setSlideStatus(slide.id, "ready", {
+            resultImage: data.compositedImage,
+            characterImage: undefined,
+            prompt: data.prompt,
+            rationale: data.rationale,
+          });
+        } else {
+          if (!data.cleanedImage) {
+            setSlideStatus(slide.id, "error", { error: "No image returned from server" });
+            continue;
+          }
+          console.log(`[Story] 🖼️ Received cleaned character image`);
+          setSlideStatus(slide.id, "loading", {
+            loadingMessage: "✨ Compositing final image..."
+          });
+          const assets = await prepareSlideAssets(slideData.baseImage, data.cleanedImage);
+          setSlideStatus(slide.id, "ready", {
+            resultImage: assets.composedImage,
+            characterImage: assets.characterImage,
+            prompt: data.prompt,
+            rationale: data.rationale,
+          });
         }
-
-        console.log(`[Story] 🖼️ Received cleaned character image`);
-        setSlideStatus(slide.id, "loading", {
-          loadingMessage: "✨ Compositing final image..."
-        });
-
-        console.log(`[Story] 🎨 Compositing character onto slide background...`);
-        const assets = await prepareSlideAssets(slideData.baseImage, data.cleanedImage);
-        console.log(`[Story] ✅ Slide ${index + 1}/${slidesToProcess.length} completed!`);
-        
-        setSlideStatus(slide.id, "ready", {
-          resultImage: assets.composedImage,
-          characterImage: assets.characterImage,
-          prompt: data.prompt,
-          rationale: data.rationale,
-        });
       }
       
       console.log("[Story] 🎉 All slides generated successfully!");
     } catch (err) {
       console.error("[Story] ❌ Generation error:", err);
-      setError(err instanceof Error ? err.message : "Failed to generate story");
+      const message = err instanceof Error ? err.message : "Failed to generate story";
+      setError(message);
+      // ensure the UI does not stay stuck in loading for the last processed slide
+      try {
+        const last = (activeStory?.slides.slice(0, slideCount) || []).find(s => s.id === (currentSlideId || ""))?.id;
+        // Prefer marking the lastSlideId from loop if available
+        const targetSlideId = last || (Object.keys(slides)[0] ?? null);
+        if (targetSlideId) {
+          setSlideStatus(targetSlideId, "error", { error: message });
+        }
+      } catch {}
     } finally {
       setGenerating(false);
     }
-  }, [activeRecord, activeStory, slideCount, setSlideStatus, slides]);
+  }, [activeRecord, activeStory, slideCount, setSlideStatus, slides, currentSlideId]);
 
   return (
     <main className="h-screen flex overflow-hidden">
@@ -294,8 +313,49 @@ export default function StoryPage() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 gap-8 overflow-hidden">
-            <div className="flex-1 glass-panel rounded-3xl border border-white/10 p-6 relative flex flex-col">
+          <>
+            <header className="flex items-center justify-between flex-shrink-0 px-2">
+              <div>
+                <h1 className="text-2xl font-semibold text-white/90">{activeStory.name}</h1>
+                <p className="text-sm text-white/50">{activeStory.slides.length} slides</p>
+              </div>
+              <button
+                type="button"
+                className="glass-panel rounded-xl px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-white/80 transition hover:border-white/40 hover:bg-white/10 disabled:opacity-60"
+                disabled={isExporting || Object.values(slides).filter(s => s.resultImage).length === 0}
+                onClick={async () => {
+                  try {
+                    setIsExporting(true);
+                    const slideList = Object.values(slides).filter(s => s.resultImage);
+                    const pdfBlob = await exportSlidesToPdf(slideList);
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(pdfBlob);
+                    link.download = `${activeStory.id || 'storybook'}-personalized.pdf`;
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                  } catch (err) {
+                    console.error("Export error:", err);
+                    setError(err instanceof Error ? err.message : "Export failed");
+                  } finally {
+                    setIsExporting(false);
+                  }
+                }}
+              >
+                {isExporting ? (
+                  <span className="inline-flex items-center gap-2">
+                    <ArrowPathIcon className="h-4 w-4 animate-spin text-white/70" />
+                    Exporting
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    <ArrowDownTrayIcon className="h-4 w-4 text-white/70" />
+                    Export PDF
+                  </span>
+                )}
+              </button>
+            </header>
+            <div className="flex flex-1 gap-8 overflow-hidden">
+              <div className="flex-1 glass-panel rounded-3xl border border-white/10 p-6 relative flex flex-col">
               {currentSlide && (
                 <>
                   <header className="mb-4 flex items-center justify-between flex-shrink-0">
@@ -321,9 +381,9 @@ export default function StoryPage() {
                         try {
                           await new Promise(resolve => setTimeout(resolve, 300));
 
-                          setSlideStatus(currentSlide.slideId, "loading", {
-                            loadingMessage: "🤖 Generating character with AI model..."
-                          });
+                        setSlideStatus(currentSlide.slideId, "loading", {
+                          loadingMessage: "🧠 Generating mask & inpainting on slide..."
+                        });
 
                           const payload = {
                             slideId: currentSlide.slideId,
@@ -346,34 +406,40 @@ export default function StoryPage() {
                           }
 
                         setSlideStatus(currentSlide.slideId, "loading", {
-                          loadingMessage: "✂️ Removing background..."
+                          loadingMessage: "🎨 Applying edits to slide..."
                         });
 
                         const data = await response.json();
                         
-                        if (!data.cleanedImage) {
-                          throw new Error("No cleaned image returned from server");
+                        if (data.compositedImage) {
+                          setSlideStatus(currentSlide.slideId, "ready", {
+                            resultImage: data.compositedImage,
+                            characterImage: undefined,
+                            prompt: data.prompt,
+                            rationale: data.rationale,
+                          });
+                        } else {
+                          if (!data.cleanedImage) {
+                            setSlideStatus(currentSlide.slideId, "error", { error: "No image returned from server" });
+                            return;
+                          }
+                          if (!currentSlide.baseImage) {
+                            throw new Error("Missing base slide image");
+                          }
+                          if (typeof window === "undefined") {
+                            throw new Error("prepareSlideAssets must run in the browser");
+                          }
+                          setSlideStatus(currentSlide.slideId, "loading", {
+                            loadingMessage: "✨ Compositing final image..."
+                          });
+                          const assets = await prepareSlideAssets(currentSlide.baseImage, data.cleanedImage);
+                          setSlideStatus(currentSlide.slideId, "ready", {
+                            resultImage: assets.composedImage,
+                            characterImage: assets.characterImage,
+                            prompt: data.prompt,
+                            rationale: data.rationale,
+                          });
                         }
-
-                        if (!currentSlide.baseImage) {
-                          throw new Error("Missing base slide image");
-                        }
-
-                        if (typeof window === "undefined") {
-                          throw new Error("prepareSlideAssets must run in the browser");
-                        }
-
-                        setSlideStatus(currentSlide.slideId, "loading", {
-                          loadingMessage: "✨ Compositing final image..."
-                        });
-
-                        const assets = await prepareSlideAssets(currentSlide.baseImage, data.cleanedImage);
-                        setSlideStatus(currentSlide.slideId, "ready", {
-                          resultImage: assets.composedImage,
-                          characterImage: assets.characterImage,
-                          prompt: data.prompt,
-                          rationale: data.rationale,
-                        });
                         } catch (err) {
                           const message = err instanceof Error ? err.message : "Inference failed";
                           setSlideStatus(currentSlide.slideId, "error", { error: message });
@@ -491,7 +557,8 @@ export default function StoryPage() {
                 })}
               </div>
             </aside>
-          </div>
+            </div>
+          </>
         )}
       </section>
     </main>

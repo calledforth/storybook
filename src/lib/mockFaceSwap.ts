@@ -15,6 +15,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function mockFaceSwap(
   slide: SlideData,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _userImage: string | null,
 ): Promise<string> {
   await delay(1200);

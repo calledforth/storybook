@@ -40,16 +40,17 @@ APPLICATION CONTEXT:
 - The system trains a custom AI model on those photos using the trigger word "${triggerWord}"
 - The storybook slides show cartoon/illustrated characters in various scenes
 - Your task: Generate a prompt to create a PHOTOREALISTIC IMAGE of the real person (${triggerWord}) performing the same action as the cartoon character in the slide
-- The final output will composite this realistic photo onto the storybook background
+- The final output will be applied via inpainting directly onto the provided slide image (preserve all non-masked content)
 
 CRITICAL REQUIREMENTS:
 1. OUTPUT MUST BE PHOTOREALISTIC - NOT cartoon, NOT illustration, NOT anime, NOT drawing
 2. The person (${triggerWord}) is a REAL HUMAN from training photos - describe them as they would appear in a natural photograph
 3. Describe the EXACT SAME POSE, ACTION, and EXPRESSION as the character in the slide image
 4. Include realistic details: natural skin tones, realistic hair, authentic clothing textures, natural lighting
-5. Describe ONLY THE PERSON - no background, no scenery (output must be isolated character with transparent/white background)
-6. Use photography terminology: "natural lighting", "realistic", "photographic", "lifelike", "authentic human"
-7. Match the character's body language, facial expression, and positioning exactly
+5. The image will be INPAINTED into the provided slide: preserve all non-masked content; do not introduce new background or scene changes; maintain the slide's perspective and composition
+6. Ensure seamless integration: clean edges with no halos, lighting/colors/shadows consistent with the slide
+7. Do NOT instruct about isolated/transparent/white backgrounds; do NOT mention background removal; focus on subject appearance only
+8. Match the character's body language, facial expression, and positioning exactly
 
 WHAT YOU'RE SEEING:
 Slide description: "${slideText}"
@@ -58,7 +59,7 @@ The attached image shows the storybook slide with a cartoon character.
 
 ${guidance ?? ""}
 
-Generate a highly detailed, photorealistic image generation prompt describing ${triggerWord} (the real person) performing the exact same action/pose as the cartoon character. The output must be a natural, realistic photograph of a real human, not an illustration. Include details about pose, expression, clothing, and emphasize photorealistic quality. Character only, no background.
+Generate a highly detailed, photorealistic image generation prompt describing ${triggerWord} (the real person) performing the exact same action/pose as the cartoon character. The output must be a natural, realistic photograph of a real human, not an illustration. Include details about pose, expression, clothing, and emphasize photorealistic quality and seamless integration with the provided slide. Do not request or imply isolated/transparent/white backgrounds.
 
 IMPORTANT: Return your response as a JSON object with this exact structure:
 {
@@ -92,7 +93,7 @@ IMPORTANT: Return your response as a JSON object with this exact structure:
       rationale: parsed.rationale,
       raw: result.response,
     };
-  } catch (error) {
+  } catch {
     throw new Error(`Failed to parse Gemini response: ${text}`);
   }
 }
